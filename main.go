@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/hpcloud/tail"
+	"github.com/nats-io/go-nats-streaming"
 )
 
 var fname string
@@ -241,8 +242,19 @@ func main() {
 
 	// Process Messages
 	go func() {
+
+		sc, err := stan.Connect("test-cluster", "icinga-log-client", stan.NatsURL("nats://icinga:password@localhost:4222"))
+		if err != nil {
+			fmt.Printf("Error connecting to nats: %s", err)
+		}
+
 		for msg := range msgch {
 			fmt.Printf("time: %s, type: %s \n", msg.Stamp, msg.MsgType)
+			b, err := json.Marshal(msg)
+			if err != nil {
+				fmt.Printf("Error marshaling MSG %s: %s", msg.Msg, err)
+			}
+			sc.Publish("icinga", b)
 		}
 	}()
 
