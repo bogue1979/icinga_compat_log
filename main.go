@@ -5,14 +5,18 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/hpcloud/tail"
 )
 
 var fname string
+var offset int64
 
 // Msg is a raw message
 type Msg struct {
@@ -171,11 +175,7 @@ func lineMsg(line string) (Msg, error) {
 	return obj, nil
 }
 
-func main() {
-	var offset int64
-	flag.StringVar(&fname, "file", "", "File to tail")
-	flag.Parse()
-
+func processFile(ch chan<- Msg) {
 	// get last location
 	dat, err := ioutil.ReadFile("seek")
 	if err != nil {
@@ -192,33 +192,60 @@ func main() {
 	if err != nil {
 		fmt.Printf("Err: %s", err)
 	}
-	//TODO write seek under all circumstances
-	// but this does not work
-	////f, err := os.Create("seek")
-	////defer func() {
-	////	offset, err = t.Tell()
-	////	if err != nil {
-	////		fmt.Println("Tell offset error: ", err)
-	////	}
-	////	f.WriteString(string(offset))
-	////	f.Sync()
-	////	f.Close()
-	////	//err = ioutil.WriteFile("seek", []byte(string(offset)), 0644)
-	////	//if err != nil {
-	////	//	fmt.Println("Write offset error: ", err)
-	////	//}
-	////}()
 
 	for line := range t.Lines {
-		// it does not work ...
 
 		msg, err := lineMsg(line.Text)
 		if err != nil {
 			fmt.Println("Err lineToObject: ", err)
 		}
-
-		//fmt.Printf("time: %s, type: %s , message: %s\n", msg.Stamp, msg.MsgType, string(msg.Msg))
-		fmt.Printf("time: %s, type: %s \n", msg.Stamp, msg.MsgType)
+		offset, err = t.Tell()
+		if err != nil {
+			fmt.Println("Tell offset error: ", err)
+		}
+		ch <- msg
 	}
+}
+
+func main() {
+	flag.StringVar(&fname, "file", "", "File to tail")
+	flag.Parse()
+
+	msgch := make(chan Msg)
+	sigs := make(chan os.Signal, 1)
+	done := make(chan bool, 1)
+
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+
+	// read file
+	go processFile(msgch)
+
+	//wait for signal and write offset to seek file
+	go func() {
+		sig := <-sigs
+		fmt.Printf("Got %s, will stop now", sig)
+
+		f, err := os.Create("seek")
+		if err != nil {
+			fmt.Println("Open offset file error: ", err)
+		}
+		defer f.Close()
+		w, err := f.WriteString(fmt.Sprintf("%d\n", offset))
+		if err != nil {
+			fmt.Println("Error writing file", err)
+		}
+		fmt.Printf("wrote %d bytes\n", w)
+		f.Sync()
+		done <- true
+	}()
+
+	// Process Messages
+	go func() {
+		for msg := range msgch {
+			fmt.Printf("time: %s, type: %s \n", msg.Stamp, msg.MsgType)
+		}
+	}()
+
+	<-done
 	fmt.Println("Exiting")
 }
