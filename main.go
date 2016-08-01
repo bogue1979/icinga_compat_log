@@ -19,34 +19,6 @@ import (
 var fname string
 var offset int64
 
-// Msg is a raw message
-type Msg struct {
-	Stamp   time.Time `json:"timestamp"`
-	MsgType string    `json:"type"`
-	Msg     json.RawMessage
-}
-
-// HostMsg is a HostState, HostAlert, HostFlappingAlert or HostFlappingAlert
-type HostMsg struct {
-	SubType    string `json:"type"`
-	HostName   string `json:"hostname"`
-	State      string `json:"state"`
-	StateType  string `json:"state_type"`
-	StateCount int64  `json:"state_count"`
-	Message    string `json:"message"`
-}
-
-// ServiceMsg is a ServiceState, ServiceAlert, ServiceDownAlert or ServiceFlappingAlert
-type ServiceMsg struct {
-	SubType     string `json:"type"`
-	HostName    string `json:"hostname"`
-	ServiceName string `json:"service_name"`
-	State       string `json:"state"`
-	StateType   string `json:"state_type"`
-	StateCount  int64  `json:"state_count"`
-	Message     string `json:"message"`
-}
-
 func msgTime(s string) (time.Time, error) {
 	i, err := strconv.ParseInt(strings.Trim(s, "[]"), 10, 64)
 	if err != nil {
@@ -243,7 +215,7 @@ func main() {
 	// Process Messages
 	go func() {
 
-		sc, err := stan.Connect("test-cluster", "icinga-log-client", stan.NatsURL("nats://icinga:password@localhost:4222"))
+		sc, err := stan.Connect("test-cluster", "icinga-log-producer", stan.NatsURL("nats://icinga:password@localhost:4222"))
 		if err != nil {
 			fmt.Printf("Error connecting to nats: %s", err)
 		}
