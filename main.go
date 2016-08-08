@@ -32,7 +32,6 @@ func splitMsg(s string) (rawtime, msgtype, msg string) {
 	rawtimeType := strings.SplitN(headType[0], " ", 2)
 
 	return rawtimeType[0], rawtimeType[1], headType[1]
-
 }
 
 func hostMessage(t, s string) (HostMsg, error) {
@@ -68,7 +67,6 @@ func serviceMessage(t, s string) (ServiceMsg, error) {
 		StateCount:  i,
 		Message:     sp[5],
 	}, nil
-
 }
 
 /*
@@ -83,7 +81,6 @@ SERVICE DOWNTIME ALERT: mguk-mysql-2.lb.meteogroup.net;SNMP_Storage_fixed;STOPPE
 SERVICE FLAPPING ALERT: orfdata03;MySQL;STARTED; Checkable appears to have started flapping (100% change >= 30% threshold)
 
 EXTERNAL COMMAND:       PROCESS_SERVICE_CHECK_RESULT;jmsmaster.ukjms.pamgservices.net;Hydrocast SQL (JMS-UK 637);0;Job ran successfully
-
 */
 
 func lineMsg(line string) (Msg, error) {
@@ -153,11 +150,12 @@ func processFile(ch chan<- Msg) {
 	dat, err := ioutil.ReadFile("seek")
 	if err != nil {
 		fmt.Printf("WARN: %s", err)
-	}
-	if len(dat) > 0 {
-		offset, err = strconv.ParseInt(string(dat[:len(dat)-1]), 10, 64)
-		if err != nil {
-			fmt.Println("Error parsing offset:", err)
+	} else {
+		if len(dat) > 0 {
+			offset, err = strconv.ParseInt(string(dat[:len(dat)-1]), 10, 64)
+			if err != nil {
+				fmt.Println("Error parsing offset:", err)
+			}
 		}
 	}
 
@@ -180,9 +178,49 @@ func processFile(ch chan<- Msg) {
 	}
 }
 
+func stanproducer(p string) (string, error) {
+	name, err := os.Hostname()
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%s_%s", p, name), nil
+}
+
 func main() {
+	var stanserver string
+	var stanclustername string
+	var producer string
+	var username string
+	var password string
+
 	flag.StringVar(&fname, "file", "", "File to tail")
+	flag.StringVar(&stanclustername, "cluster", "", "Stan Cluster Name")
+	flag.StringVar(&stanserver, "server", "", "Stan Server Name")
+	flag.StringVar(&producer, "producer", "", "Producer Name")
+	flag.StringVar(&username, "username", "icinga", "username")
+	flag.StringVar(&password, "password", "password", "password")
 	flag.Parse()
+
+	if fname == "" {
+		fmt.Println("Need filename to tail")
+		os.Exit(1)
+	}
+
+	if stanserver == "" {
+		fmt.Println("Need stan server to connect")
+		os.Exit(1)
+	}
+
+	if stanclustername == "" {
+		fmt.Println("Need stan clustername to connect")
+		os.Exit(1)
+	}
+
+	producername, err := stanproducer(producer)
+	if err != nil {
+		fmt.Println("Error: ", err)
+		os.Exit(1)
+	}
 
 	msgch := make(chan Msg)
 	sigs := make(chan os.Signal, 1)
@@ -215,9 +253,10 @@ func main() {
 	// Process Messages
 	go func() {
 
-		sc, err := stan.Connect("test-cluster", "icinga-log-producer", stan.NatsURL("nats://icinga:password@localhost:4222"))
+		sc, err := stan.Connect(stanclustername, producername, stan.NatsURL(fmt.Sprintf("nats://%s:%s@%s:4222", username, password, stanserver)))
 		if err != nil {
 			fmt.Printf("Error connecting to nats: %s", err)
+			os.Exit(0)
 		}
 
 		for msg := range msgch {

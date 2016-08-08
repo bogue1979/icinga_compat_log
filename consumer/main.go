@@ -3,13 +3,14 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
 	"time"
 
-	"gopkg.in/olivere/elastic.v3"
+	elastic "gopkg.in/olivere/elastic.v2"
 
 	"github.com/nats-io/go-nats-streaming"
 )
@@ -63,7 +64,7 @@ func addLogsToIndex(client *elastic.Client, index, j string) error {
 	return nil
 }
 
-func printMsg(m *stan.Msg, i int, es *elastic.Client) {
+func sendMsg(m *stan.Msg, i int, es *elastic.Client) {
 	var imsg Msg
 	//log.Printf("[#%d] Received on [%s]: '%s'\n", i, m.Subject, m)
 
@@ -79,14 +80,52 @@ func printMsg(m *stan.Msg, i int, es *elastic.Client) {
 
 }
 
+func stanconsumer(p string) (string, error) {
+	name, err := os.Hostname()
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%s_%s", p, name), nil
+}
+
 func main() {
 
-	clusterID := "test-cluster"
-	clientID := "icinga-log-client"
+	var clusterID string
+	var stanserver string
+	var username string
+	var password string
+	var consumer string
+	var esURL string
+
+	flag.StringVar(&clusterID, "cluster", "test", "Stan Cluster Name")
+	flag.StringVar(&stanserver, "server", "", "Stan Server Name")
+	flag.StringVar(&username, "username", "icinga", "username")
+	flag.StringVar(&password, "password", "password", "password")
+	flag.StringVar(&consumer, "consumer", "consumer", "Consumer Name")
+	flag.StringVar(&esURL, "es", "http://localhost:9200", "Elasticsearch URL")
+	flag.Parse()
+
+	if stanserver == "" {
+		fmt.Println("Need stan server to connect")
+		os.Exit(1)
+	}
+
+	if clusterID == "" {
+		fmt.Println("Need stan clustername to connect")
+		os.Exit(1)
+	}
+
+	clientID, err := stanconsumer(consumer)
+	if err != nil {
+		fmt.Println("Error: ", err)
+		os.Exit(1)
+	}
+
+	URL := fmt.Sprintf("nats://%s:%s@%s:4222", username, password, stanserver)
+
 	subj := "icinga"
 	qgroup := ""
 	durable := clientID + qgroup
-	URL := "nats://icinga:password@localhost:4222"
 	startOpt := stan.DeliverAllAvailable()
 	unsubscribe := true
 
@@ -96,7 +135,7 @@ func main() {
 	}
 	log.Printf("Connected to %s clusterID: [%s] clientID: [%s]\n", URL, clusterID, clientID)
 
-	esclient, err := elastic.NewClient(elastic.SetURL("http://localhost:9200"))
+	esclient, err := elastic.NewClient(elastic.SetURL(esURL))
 	if err != nil {
 		panic(err)
 	}
@@ -104,7 +143,7 @@ func main() {
 	i := 0
 	mcb := func(msg *stan.Msg) {
 		i++
-		printMsg(msg, i, esclient)
+		sendMsg(msg, i, esclient)
 	}
 
 	sub, err := sc.QueueSubscribe(subj, qgroup, mcb, startOpt, stan.DurableName(durable))
