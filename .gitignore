@@ -2,3 +2,8 @@ icinga*.log
 icinga_compat_log
 consumer/consumer
 seek
+
+docker/build
+docker/nats-streaming-server
+docker/package_*.zip
+
