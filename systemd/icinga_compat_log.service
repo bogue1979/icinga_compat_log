@@ -1,0 +1,18 @@
+[Unit]
+Description=Daemon to send compatlog events to nats-streaming-server
+After=icinga2.service
+Wants=
+
+[Service]
+Restart=always
+StartLimitInterval=20
+StartLimitBurst=5
+TimeoutStartSec=3
+
+ExecStart=/usr/local/bin/icinga_compat_log -cluster test-cluster -file /var/log/icinga2/compat/icinga.log -password password -username icinga -server nl-ede-docker01.nl.meteogroup.net
+ExecStop=-/usr/bin/pkill -SIGTERM icinga_compat_log
+
+[Install]
+WantedBy=multi-user.target
+
+

@@ -18,6 +18,7 @@ import (
 
 var fname string
 var offset int64
+var seekfile string
 
 func msgTime(s string) (time.Time, error) {
 	i, err := strconv.ParseInt(strings.Trim(s, "[]"), 10, 64)
@@ -139,7 +140,7 @@ func lineMsg(line string) (Msg, error) {
 			return obj, fmt.Errorf("Error marshal %s , %s", msg, err)
 		}
 	default:
-		fmt.Println("TBD")
+		//fmt.Println("TBD")
 	}
 
 	return obj, nil
@@ -147,7 +148,7 @@ func lineMsg(line string) (Msg, error) {
 
 func processFile(ch chan<- Msg) {
 	// get last location
-	dat, err := ioutil.ReadFile("seek")
+	dat, err := ioutil.ReadFile(seekfile)
 	if err != nil {
 		fmt.Printf("WARN: %s", err)
 	} else {
@@ -183,7 +184,8 @@ func stanproducer(p string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("%s_%s", p, name), nil
+	n := strings.Split(name, ".")
+	return fmt.Sprintf("%s_%s", p, n[0]), nil
 }
 
 func main() {
@@ -199,6 +201,7 @@ func main() {
 	flag.StringVar(&producer, "producer", "", "Producer Name")
 	flag.StringVar(&username, "username", "icinga", "username")
 	flag.StringVar(&password, "password", "password", "password")
+	flag.StringVar(&seekfile, "seek", "/var/log/icinga2/compat/seek", "seekfile")
 	flag.Parse()
 
 	if fname == "" {
@@ -236,7 +239,7 @@ func main() {
 		sig := <-sigs
 		fmt.Printf("Got %s, will stop now", sig)
 
-		f, err := os.Create("seek")
+		f, err := os.Create(seekfile)
 		if err != nil {
 			fmt.Println("Open offset file error: ", err)
 		}
@@ -260,7 +263,7 @@ func main() {
 		}
 
 		for msg := range msgch {
-			fmt.Printf("time: %s, type: %s \n", msg.Stamp, msg.MsgType)
+			//fmt.Printf("time: %s, type: %s \n", msg.Stamp, msg.MsgType)
 			b, err := json.Marshal(msg)
 			if err != nil {
 				fmt.Printf("Error marshaling MSG %s: %s", msg.Msg, err)
