@@ -28,8 +28,8 @@ func (m *Msg) String() string {
 	return fmt.Sprintf("{\"timestamp\": \"%d\", \"type\": \"%s\" , \"msg\": %s }", t, m.MsgType, string(m.Msg))
 }
 
-func toElasticsearch(client *elastic.Client, j string) error {
-	indexName := "testindex"
+func toElasticsearch(client *elastic.Client, j *Msg) error {
+	indexName := j.Stamp.Format("logstash-2006.01.02")
 
 	indexMapping := `{ "mappings": { "IcingaLog": { "properties": { "timestamp" : { "type": "date" }}}}}`
 
@@ -50,7 +50,7 @@ func toElasticsearch(client *elastic.Client, j string) error {
 			return errors.New("CreateIndex was not acknowledged. Check that timeout value is correct.")
 		}
 	}
-	return addLogsToIndex(client, indexName, j)
+	return addLogsToIndex(client, indexName, fmt.Sprintf("%s\n", j))
 }
 
 func addLogsToIndex(client *elastic.Client, index, j string) error {
@@ -73,7 +73,7 @@ func sendMsg(m *stan.Msg, i int, es *elastic.Client) {
 	}
 
 	if imsg.MsgType != "" {
-		if err := toElasticsearch(es, fmt.Sprintf("%s\n", &imsg)); err != nil {
+		if err := toElasticsearch(es, &imsg); err != nil {
 			fmt.Println(err)
 		}
 	}
